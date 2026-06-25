@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AuraPaper — Premium Question Paper Maker</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- PDF.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  
+  <!-- Tesseract.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <div class="app-container">
+    
+    <!-- Sidebar / Utility Panel -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <i data-lucide="sparkles"></i>
+          <span>AuraPaper</span>
+        </div>
+      </div>
+      
+      <div class="sidebar-content">
+        <!-- Document Upload Section -->
+        <div>
+          <div class="sidebar-section-title">Import Source Files</div>
+          <div class="dropzone" id="upload-dropzone">
+            <i data-lucide="file-up" class="dropzone-icon"></i>
+            <span class="dropzone-text">Upload PDF or Image</span>
+            <span class="dropzone-subtext">Drag & drop or browse</span>
+            <input type="file" id="file-input" accept="application/pdf, image/png, image/jpeg" multiple>
+            
+            <!-- Loading indicator for upload -->
+            <div class="loading-overlay" id="upload-loading">
+              <i data-lucide="loader-2" class="spinner" style="font-size: 2rem; color: var(--primary);"></i>
+              <span id="loading-text" style="font-size: 0.8125rem;">Extracting content...</span>
+            </div>
+          </div>
+          
+          <!-- File processing queue -->
+          <div class="file-queue" id="file-queue"></div>
+        </div>
+        
+        <!-- API Setup Panel -->
+        <div class="ai-config-box">
+          <div class="sidebar-section-title" style="margin-bottom: 0.5rem;">AI Extraction Engine</div>
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+            Provide a Gemini API Key to enable advanced AI parsing of exam layouts, questions, and images.
+          </p>
+          <div class="api-key-input-container">
+            <input type="password" id="gemini-key-input" placeholder="Paste Gemini API Key...">
+            <button class="btn-icon" id="save-key-btn" title="Save API Key">
+              <i data-lucide="key"></i>
+            </button>
+          </div>
+          <div id="key-status-text" style="font-size: 0.7rem; margin-top: 0.35rem; display: none;"></div>
+        </div>
+        
+        <!-- Controls & Presets -->
+        <div>
+          <div class="sidebar-section-title">Quick Actions</div>
+          <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+            <button class="btn-secondary" id="btn-add-custom-q" style="width: 100%; justify-content: center;">
+              <i data-lucide="plus-circle"></i> Add Custom Question
+            </button>
+            <button class="btn-secondary" id="btn-auto-generate" style="width: 100%; justify-content: center;">
+              <i data-lucide="cpu"></i> Auto-Generate Paper
+            </button>
+            <button class="btn-secondary" id="btn-backup-restore" style="width: 100%; justify-content: center;">
+              <i data-lucide="database"></i> Backup / Restore (JSON)
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
+    
+    <!-- Main Workspace -->
+    <div class="workspace-wrapper">
+      
+      <!-- Top Nav -->
+      <header class="top-nav">
+        <div class="top-nav-title">
+          <h1 id="paper-main-title">New Question Paper</h1>
+          <p id="paper-main-subtitle">Build, customize, and export printable exams</p>
+        </div>
+        <div class="nav-actions">
+          <button class="theme-toggle" id="theme-toggle" title="Toggle Theme">
+            <i data-lucide="sun"></i>
+          </button>
+          <button class="btn-primary" id="btn-preview-paper">
+            <i data-lucide="eye"></i> Print & Export Preview
+          </button>
+        </div>
+      </header>
+      
+      <!-- Split Pane (Bank | Canvas) -->
+      <div class="split-pane">
+        
+        <!-- Left Pane: Question Bank -->
+        <section class="pane-left">
+          <div class="pane-header">
+            <div class="pane-header-title">
+              <i data-lucide="archive"></i>
+              <span>Question Bank</span>
+              <span id="bank-count-badge" class="badge" style="background-color: var(--primary); color: white; margin-left: 0.5rem;">15</span>
+            </div>
+            <button class="btn-card" id="btn-clear-bank" title="Reset bank to default questions" style="font-size: 0.75rem; display: flex; align-items: center; gap: 0.25rem;">
+              <i data-lucide="rotate-ccw"></i> Reset
+            </button>
+          </div>
+          
+          <!-- Bank filters -->
+          <div class="bank-filters">
+            <div class="search-box">
+              <i data-lucide="search"></i>
+              <input type="text" id="search-input" placeholder="Search questions or topics...">
+            </div>
+            
+            <div class="filter-row">
+              <select id="filter-subject">
+                <option value="">All Subjects</option>
+              </select>
+              <select id="filter-difficulty">
+                <option value="">All Difficulties</option>
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+              <select id="filter-type">
+                <option value="">All Types</option>
+                <option value="mcq">MCQ</option>
+                <option value="short">Short Answer</option>
+                <option value="long">Long Answer</option>
+                <option value="fill">Fill in blanks</option>
+              </select>
+            </div>
+          </div>
+          
+          <!-- Question List -->
+          <div class="question-list" id="bank-question-list">
+            <!-- Questions rendered via JS -->
+          </div>
+        </section>
+        
+        <!-- Right Pane: Paper Canvas Editor -->
+        <section class="pane-right">
+          <div class="pane-header">
+            <div class="pane-header-title">
+              <i data-lucide="file-text"></i>
+              <span>Question Paper Canvas</span>
+            </div>
+            <button class="btn-card" id="btn-clear-canvas" title="Clear Canvas" style="color: var(--danger);">
+              <i data-lucide="trash-2"></i>
+            </button>
+          </div>
+          
+          <!-- Canvas Body -->
+          <div class="editor-canvas-container">
+            <div class="editor-canvas" id="editor-canvas">
+              
+              <!-- Paper metadata headers -->
+              <form class="paper-meta-form" id="paper-meta-form">
+                <div class="paper-input-group">
+                  <div class="paper-input-single">
+                    <label for="meta-school">Institution Name</label>
+                    <input type="text" id="meta-school" placeholder="e.g., Apex Academy of Sciences" value="Apex Academy of Sciences">
+                  </div>
+                  <div class="paper-input-single">
+                    <label for="meta-exam">Exam Title</label>
+                    <input type="text" id="meta-exam" placeholder="e.g., Terminal Examination 2026" value="Terminal Examination 2026">
+                  </div>
+                </div>
+                
+                <div class="paper-input-group">
+                  <div class="paper-input-single">
+                    <label for="meta-subject">Subject</label>
+                    <input type="text" id="meta-subject" placeholder="e.g., General Physics" value="General Physics">
+                  </div>
+                  <div class="paper-input-single">
+                    <label for="meta-class">Grade / Class</label>
+                    <input type="text" id="meta-class" placeholder="e.g., Class XII" value="Class XII">
+                  </div>
+                </div>
+                
+                <div class="paper-input-group">
+                  <div class="paper-input-single">
+                    <label for="meta-time">Time Allowed</label>
+                    <input type="text" id="meta-time" placeholder="e.g., 3 Hours" value="3 Hours">
+                  </div>
+                  <div class="paper-input-single">
+                    <label for="meta-marks">Target Total Marks</label>
+                    <input type="number" id="meta-marks" placeholder="e.g., 100" value="100">
+                  </div>
+                </div>
+                
+                <div class="paper-input-single">
+                  <label for="meta-instructions">General Instructions (one per line)</label>
+                  <textarea id="meta-instructions" rows="3" placeholder="e.g., Answer all questions."></textarea>
+                </div>
+              </form>
+              
+              <!-- Canvas Section Area -->
+              <div id="paper-sections-container">
+                <!-- Sections dynamic rendering -->
+              </div>
+              
+              <!-- Add new Section button -->
+              <div class="add-section-btn" id="btn-add-section">
+                <i data-lucide="plus"></i> Add New Section
+              </div>
+              
+            </div>
+          </div>
+          
+          <!-- Tally metrics bar -->
+          <footer class="paper-stats-bar">
+            <div class="stat-item">
+              <div class="stat-icon"><i data-lucide="help-circle"></i></div>
+              <div class="stat-info">
+                <span class="stat-val" id="stat-q-count">0</span>
+                <span class="stat-label">Questions</span>
+              </div>
+            </div>
+            
+            <div class="stat-item">
+              <div class="stat-icon"><i data-lucide="award"></i></div>
+              <div class="stat-info">
+                <span class="stat-val" id="stat-marks-tally">0 / 100</span>
+                <span class="stat-label" id="stat-marks-status">Marks Tally</span>
+              </div>
+            </div>
+            
+            <div class="stat-item">
+              <div class="stat-icon"><i data-lucide="trending-up"></i></div>
+              <div class="stat-info">
+                <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.25rem;">
+                  <span class="stat-val" style="font-size: 0.8125rem;">Difficulty Ratio</span>
+                </div>
+                <div class="stat-distribution" id="difficulty-dist">
+                  <div class="dist-bar dist-easy" style="width: 33%" title="Easy: 33%"></div>
+                  <div class="dist-bar dist-medium" style="width: 34%" title="Medium: 34%"></div>
+                  <div class="dist-bar dist-hard" style="width: 33%" title="Hard: 33%"></div>
+                </div>
+              </div>
+            </div>
+          </footer>
+          
+        </section>
+        
+      </div>
+      
+    </div>
+    
+  </div>
+
+  <!-- PREVIEW OVERLAY VIEW -->
+  <div class="print-preview-overlay" id="print-preview-overlay">
+    <div class="print-preview-header">
+      <div style="display: flex; align-items: center; gap: 1rem; color: white;">
+        <button class="btn-secondary" id="btn-close-preview" style="color: white; border-color: rgba(255,255,255,0.2);">
+          <i data-lucide="arrow-left"></i> Back to Editor
+        </button>
+        <span style="font-weight: 600; font-size: 1.1rem;">Print & PDF Export Panel</span>
+      </div>
+      <div style="display: flex; gap: 0.75rem;">
+        <button class="btn-secondary" id="btn-export-word" style="color: white; border-color: rgba(255,255,255,0.2);">
+          <i data-lucide="file-text"></i> Export as Word
+        </button>
+        <button class="btn-primary" id="btn-trigger-print">
+          <i data-lucide="printer"></i> Print / Save as PDF
+        </button>
+      </div>
+    </div>
+    
+    <!-- Print Settings bar -->
+    <div class="print-settings-bar">
+      <div class="print-settings-group">
+        <div class="print-setting">
+          <label>Font Family:</label>
+          <select id="print-setting-font">
+            <option value="'Times New Roman', Times, serif">Times New Roman (Standard)</option>
+            <option value="'Georgia', serif">Georgia (Book style)</option>
+            <option value="'Outfit', sans-serif">Outfit (Modern)</option>
+            <option value="'Arial', sans-serif">Arial (Classic)</option>
+          </select>
+        </div>
+        <div class="print-setting">
+          <label>Font Size:</label>
+          <select id="print-setting-size">
+            <option value="10pt">Small (10pt)</option>
+            <option value="11pt" selected>Medium (11pt)</option>
+            <option value="12pt">Large (12pt)</option>
+            <option value="14pt">Extra Large (14pt)</option>
+          </select>
+        </div>
+        <div class="print-setting">
+          <label>Spacing:</label>
+          <select id="print-setting-spacing">
+            <option value="1.2">Single (1.2)</option>
+            <option value="1.5" selected>1.5 Spacing</option>
+            <option value="2.0">Double (2.0)</option>
+          </select>
+        </div>
+        <div class="print-setting">
+          <label>Margin:</label>
+          <select id="print-setting-margin">
+            <option value="15mm">Compact (15mm)</option>
+            <option value="20mm" selected>Standard (20mm)</option>
+            <option value="25mm">Wide (25mm)</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="print-settings-group">
+        <div class="print-setting">
+          <label>Show Answer Key:</label>
+          <label class="switch">
+            <input type="checkbox" id="print-toggle-answers">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="print-setting">
+          <label>Show Marks:</label>
+          <label class="switch">
+            <input type="checkbox" id="print-toggle-marks" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Printable Paper Sheet Container -->
+    <div class="print-preview-body">
+      <div class="print-paper-canvas" id="print-paper-canvas">
+        <!-- Rendered purely like an official paper -->
+      </div>
+    </div>
+  </div>
+
+  <!-- API KEY MODAL (Configuring Gemini API) -->
+  <div class="modal-overlay" id="api-modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Configure Gemini API Key</h3>
+        <button class="modal-close" onclick="closeModal('api-modal-overlay')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.875rem; color: var(--text-muted); line-height: 1.5;">
+          AuraPaper uses the Gemini API to analyze files, run OCR, and extract well-structured questions automatically. Your API key is stored safely only in your local browser storage.
+        </p>
+        <div class="form-group">
+          <label for="gemini-modal-input">Gemini API Key</label>
+          <input type="password" id="gemini-modal-input" placeholder="Paste your API key here (AIzaSy...)">
+        </div>
+        <p style="font-size: 0.75rem; color: var(--text-muted);">
+          Get a free API Key from the Google AI Studio console.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal('api-modal-overlay')">Cancel</button>
+        <button class="btn-primary" id="modal-save-key-btn">Save Key</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD / EDIT QUESTION MODAL -->
+  <div class="modal-overlay" id="q-modal-overlay">
+    <div class="modal" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3 id="q-modal-title">Add Custom Question</h3>
+        <button class="modal-close" onclick="closeModal('q-modal-overlay')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="q-edit-id">
+        
+        <div class="form-group">
+          <label for="q-modal-text">Question Prompt</label>
+          <textarea id="q-modal-text" rows="3" placeholder="Type your question prompt here..." required></textarea>
+        </div>
+        
+        <div class="form-group">
+          <label for="q-modal-type">Question Type</label>
+          <select id="q-modal-type">
+            <option value="mcq">Multiple Choice Question (MCQ)</option>
+            <option value="short">Short Answer</option>
+            <option value="long">Long/Detail Answer</option>
+            <option value="fill">Fill in the blanks</option>
+          </select>
+        </div>
+        
+        <!-- Options wrapper for MCQ -->
+        <div class="form-group" id="q-modal-options-wrapper">
+          <label>Multiple Choice Options</label>
+          <div class="mcq-options-form">
+            <input type="text" id="q-opt-a" placeholder="Option A">
+            <input type="text" id="q-opt-b" placeholder="Option B">
+            <input type="text" id="q-opt-c" placeholder="Option C">
+            <input type="text" id="q-opt-d" placeholder="Option D">
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label for="q-modal-answer">Correct Answer / Explanation / Rubric</label>
+          <textarea id="q-modal-answer" rows="2" placeholder="Provide the correct answer key or grading explanation..."></textarea>
+        </div>
+        
+        <div class="paper-input-group">
+          <div class="form-group">
+            <label for="q-modal-subject">Subject</label>
+            <input type="text" id="q-modal-subject" placeholder="e.g. Physics" value="General">
+          </div>
+          <div class="form-group">
+            <label for="q-modal-topic">Topic</label>
+            <input type="text" id="q-modal-topic" placeholder="e.g. Algebra" value="General">
+          </div>
+        </div>
+        
+        <div class="paper-input-group">
+          <div class="form-group">
+            <label for="q-modal-difficulty">Difficulty</label>
+            <select id="q-modal-difficulty">
+              <option value="easy">Easy</option>
+              <option value="medium" selected>Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="q-modal-marks">Marks</label>
+            <input type="number" id="q-modal-marks" min="1" value="2">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal('q-modal-overlay')">Cancel</button>
+        <button class="btn-primary" id="modal-save-q-btn">Save Question</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUTO GENERATE MODAL -->
+  <div class="modal-overlay" id="auto-gen-modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Auto-Generate Question Paper</h3>
+        <button class="modal-close" onclick="closeModal('auto-gen-modal-overlay')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.875rem; color: var(--text-muted); line-height: 1.5;">
+          Automatically generate structured sections from the Question Bank based on your criteria.
+        </p>
+        
+        <div class="form-group">
+          <label for="gen-total-marks">Target Total Marks</label>
+          <input type="number" id="gen-total-marks" value="25" min="5" max="100">
+        </div>
+        
+        <div class="form-group">
+          <label for="gen-subject">Focus Subject</label>
+          <select id="gen-subject">
+            <option value="">Any Subject / All</option>
+            <!-- Filled dynamically -->
+          </select>
+        </div>
+        
+        <div class="paper-input-group">
+          <div class="form-group">
+            <label>Easy Ratio (%)</label>
+            <input type="number" id="gen-ratio-easy" value="40" min="0" max="100">
+          </div>
+          <div class="form-group">
+            <label>Medium Ratio (%)</label>
+            <input type="number" id="gen-ratio-medium" value="40" min="0" max="100">
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label>Hard Ratio (%)</label>
+          <input type="number" id="gen-ratio-hard" value="20" min="0" max="100">
+        </div>
+        
+        <p style="font-size: 0.75rem; color: var(--text-muted);">
+          Note: This selects the closest matching combination of questions currently in your Question Bank.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal('auto-gen-modal-overlay')">Cancel</button>
+        <button class="btn-primary" id="btn-trigger-auto-gen">Generate</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BACKUP / RESTORE MODAL -->
+  <div class="modal-overlay" id="backup-modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Backup / Restore Bank</h3>
+        <button class="modal-close" onclick="closeModal('backup-modal-overlay')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Export Current Bank & Canvas</label>
+          <button class="btn-secondary" id="btn-export-backup" style="justify-content: center; gap: 0.5rem; margin-top: 0.25rem;">
+            <i data-lucide="download"></i> Download Backup File (JSON)
+          </button>
+        </div>
+        
+        <hr style="border-color: var(--border-color); margin: 0.5rem 0;">
+        
+        <div class="form-group">
+          <label>Restore from Backup File</label>
+          <div style="position: relative; display: inline-block;">
+            <input type="file" id="restore-file-input" accept=".json" style="position: absolute; opacity: 0; width: 100%; height: 100%; cursor: pointer;">
+            <button class="btn-secondary" style="pointer-events: none; width: 100%; justify-content: center;">
+              <i data-lucide="upload"></i> Select & Upload Backup JSON
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal('backup-modal-overlay')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST CONTAINER FOR NOTIFICATIONS -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Main JavaScript File -->
+  <script src="mock-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
