@@ -40,12 +40,12 @@
       <div class="sidebar-content">
         <!-- Document Upload Section -->
         <div>
-          <div class="sidebar-section-title">Upload Textbook (PDF)</div>
+          <div class="sidebar-section-title">Upload Source (PDF or Image)</div>
           <div class="dropzone" id="upload-dropzone">
-            <i data-lucide="book-open" class="dropzone-icon"></i>
-            <span class="dropzone-text">Upload Book PDF</span>
+            <i data-lucide="file-up" class="dropzone-icon"></i>
+            <span class="dropzone-text">Upload Book PDF or Image</span>
             <span class="dropzone-subtext">Drag & drop or browse</span>
-            <input type="file" id="file-input" accept="application/pdf">
+            <input type="file" id="file-input" accept="application/pdf, image/png, image/jpeg, image/webp">
             
             <!-- Loading indicator for upload -->
             <div class="loading-overlay" id="upload-loading">
@@ -103,6 +103,9 @@
           <div style="display: flex; flex-direction: column; gap: 0.5rem;">
             <button class="btn-secondary" id="btn-add-custom-q" style="width: 100%; justify-content: center;">
               <i data-lucide="plus-circle"></i> Add Custom Question
+            </button>
+            <button class="btn-secondary" id="btn-extract-image" style="width: 100%; justify-content: center;">
+              <i data-lucide="image"></i> Extract from Image
             </button>
             <button class="btn-secondary" id="btn-auto-generate" style="width: 100%; justify-content: center;">
               <i data-lucide="cpu"></i> Auto-Generate Paper
@@ -437,6 +440,49 @@
         <div class="form-group">
           <label for="q-modal-text">Question Prompt</label>
           <textarea id="q-modal-text" rows="3" placeholder="Type your question prompt here..." required></textarea>
+        </div>
+        
+        <!-- Attachments -->
+        <div class="form-group">
+          <label>Attachments <span style="font-weight: 400; color: var(--text-muted); font-size: 0.75rem;">(optional)</span></label>
+          <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+            
+            <!-- Image Attachment Zone -->
+            <div class="image-upload-zone" id="q-modal-image-zone" style="flex: 1; min-width: 200px;">
+              <input type="file" id="q-modal-image-input" accept="image/png, image/jpeg, image/webp, image/gif" style="display: none;">
+              <div class="image-upload-placeholder" id="q-modal-image-placeholder">
+                <i data-lucide="image-plus" style="width: 28px; height: 28px; color: var(--text-muted);"></i>
+                <span>Attach Image</span>
+                <span style="font-size: 0.7rem; color: var(--text-muted);">max 5 MB</span>
+              </div>
+              <div class="image-preview-container" id="q-modal-image-preview" style="display: none;">
+                <img id="q-modal-image-thumb" src="" alt="Image preview">
+                <button type="button" class="image-remove-btn" id="q-modal-image-remove" title="Remove image">
+                  <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Document Attachment Zone -->
+            <div class="image-upload-zone" id="q-modal-doc-zone" style="flex: 1; min-width: 200px;">
+              <input type="file" id="q-modal-doc-input" accept="application/pdf, .doc, .docx, .txt" style="display: none;">
+              <div class="image-upload-placeholder" id="q-modal-doc-placeholder">
+                <i data-lucide="paperclip" style="width: 28px; height: 28px; color: var(--text-muted);"></i>
+                <span>Attach Document</span>
+                <span style="font-size: 0.7rem; color: var(--text-muted);">max 1 MB</span>
+              </div>
+              <div class="image-preview-container" id="q-modal-doc-preview-container" style="display: none;">
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem; width: 100%;">
+                  <i data-lucide="file-text" style="width: 40px; height: 40px; color: var(--primary);"></i>
+                  <span id="q-modal-doc-name" style="font-size: 0.85rem; font-weight: 500; text-align: center; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">filename.pdf</span>
+                </div>
+                <button type="button" class="image-remove-btn" id="q-modal-doc-remove" title="Remove document">
+                  <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+                </button>
+              </div>
+            </div>
+
+          </div>
         </div>
         
         <div class="form-group">

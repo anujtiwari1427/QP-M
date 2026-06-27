@@ -41,6 +41,12 @@ let draggedQuestionId = null;
 let draggedSectionId = null;
 let dragSource = null; // 'bank' or 'section'
 
+// Image modal state
+let currentModalImage = null; // base64 data URL for the image being edited/added
+let currentModalDoc = null; // base64 data URL for the document being edited/added
+let currentExtractImage = null; // base64 data for image extraction
+let currentExtractMime = null; // mime type for image extraction
+
 // DOM Elements & Initializers
 document.addEventListener('DOMContentLoaded', () => {
   loadState();
@@ -263,6 +269,79 @@ function setupEventListeners() {
     }
   });
 
+  // Image Upload Zone handlers inside question modal
+  const imgZone = document.getElementById('q-modal-image-zone');
+  const imgInput = document.getElementById('q-modal-image-input');
+  const imgPlaceholder = document.getElementById('q-modal-image-placeholder');
+  const imgPreview = document.getElementById('q-modal-image-preview');
+  const imgThumb = document.getElementById('q-modal-image-thumb');
+  const imgRemoveBtn = document.getElementById('q-modal-image-remove');
+
+  // Click zone to open file picker
+  imgZone.addEventListener('click', (e) => {
+    if (e.target.closest('.image-remove-btn')) return;
+    imgInput.click();
+  });
+
+  // Drag & drop on zone
+  imgZone.addEventListener('dragover', (e) => e.preventDefault() || imgZone.classList.add('dragover'));
+  imgZone.addEventListener('dragleave', () => imgZone.classList.remove('dragover'));
+  imgZone.addEventListener('drop', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    imgZone.classList.remove('dragover');
+    if (e.dataTransfer.files[0]) processImageFileOnly(e.dataTransfer.files[0]);
+  });
+
+  // File input change
+  imgInput.addEventListener('change', (e) => {
+    if (e.target.files[0]) processImageFileOnly(e.target.files[0]);
+    imgInput.value = ''; 
+  });
+
+  // Remove button
+  imgRemoveBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    currentModalImage = null;
+    imgThumb.src = '';
+    imgPreview.style.display = 'none';
+    imgPlaceholder.style.display = 'flex';
+    lucide.createIcons();
+  });
+
+  // Document Upload Zone handlers inside question modal
+  const docZone = document.getElementById('q-modal-doc-zone');
+  const docInput = document.getElementById('q-modal-doc-input');
+  const docPlaceholder = document.getElementById('q-modal-doc-placeholder');
+  const docPreviewContainer = document.getElementById('q-modal-doc-preview-container');
+  const docName = document.getElementById('q-modal-doc-name');
+  const docRemoveBtn = document.getElementById('q-modal-doc-remove');
+
+  docZone.addEventListener('click', (e) => {
+    if (e.target.closest('.image-remove-btn')) return;
+    docInput.click();
+  });
+
+  docZone.addEventListener('dragover', (e) => e.preventDefault() || docZone.classList.add('dragover'));
+  docZone.addEventListener('dragleave', () => docZone.classList.remove('dragover'));
+  docZone.addEventListener('drop', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    docZone.classList.remove('dragover');
+    if (e.dataTransfer.files[0]) processDocFileOnly(e.dataTransfer.files[0]);
+  });
+
+  docInput.addEventListener('change', (e) => {
+    if (e.target.files[0]) processDocFileOnly(e.target.files[0]);
+    docInput.value = ''; 
+  });
+
+  docRemoveBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    currentModalDoc = null;
+    docPreviewContainer.style.display = 'none';
+    docPlaceholder.style.display = 'flex';
+    lucide.createIcons();
+  });
+
   // Auto generate action
   document.getElementById('btn-auto-generate').addEventListener('click', () => {
     // Populate auto generate subjects dropdown
@@ -293,6 +372,111 @@ function setupEventListeners() {
   document.getElementById('btn-add-custom-q').addEventListener('click', () => {
     openQuestionModal();
   });
+
+  const btnExtractImg = document.getElementById('btn-extract-image');
+  if(btnExtractImg) {
+    btnExtractImg.addEventListener('click', () => {
+      openModal('image-extract-modal-overlay');
+    });
+  }
+
+  // Image extraction modal logic
+  const extractZone = document.getElementById('extract-image-zone');
+  const extractInput = document.getElementById('extract-image-input');
+  const extractPreview = document.getElementById('extract-image-preview');
+  const extractThumb = document.getElementById('extract-image-thumb');
+  const extractPlaceholder = document.getElementById('extract-image-placeholder');
+  const extractRemove = document.getElementById('extract-image-remove');
+  const btnConfirmExtract = document.getElementById('btn-confirm-image-extract');
+
+  if (extractZone) {
+    extractZone.addEventListener('click', (e) => {
+      if (e.target.closest('.image-remove-btn')) return;
+      extractInput.click();
+    });
+    extractZone.addEventListener('dragover', (e) => e.preventDefault() || extractZone.classList.add('dragover'));
+    extractZone.addEventListener('dragleave', () => extractZone.classList.remove('dragover'));
+    extractZone.addEventListener('drop', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      extractZone.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) handleExtractImage(e.dataTransfer.files[0]);
+    });
+    extractInput.addEventListener('change', (e) => {
+      if (e.target.files[0]) handleExtractImage(e.target.files[0]);
+      extractInput.value = ''; 
+    });
+    extractRemove.addEventListener('click', (e) => {
+      e.stopPropagation();
+      resetExtractImage();
+    });
+
+    btnConfirmExtract.addEventListener('click', async () => {
+      if (!currentExtractImage) {
+        showToast("Please upload an image first.", "error");
+        return;
+      }
+      closeModal('image-extract-modal-overlay');
+      const loading = document.getElementById('upload-loading');
+      const statusEl = document.getElementById('loading-text');
+      loading.classList.add('active');
+      statusEl.textContent = `Extracting questions from image...`;
+
+      try {
+        const questions = await extractQuestionsWithAI(currentExtractImage, true, currentExtractMime);
+        if (questions && questions.length > 0) {
+          // Assign unique IDs to extracted questions
+          questions.forEach(q => {
+             q.id = 'ext-' + Date.now() + Math.floor(Math.random() * 1000);
+          });
+          state.bankQuestions = [...questions, ...state.bankQuestions];
+          showToast(`Successfully added ${questions.length} questions to the bank!`, "success");
+          populateFilters();
+          renderQuestionBank();
+          renderPaperCanvas();
+          renderStats();
+          saveState();
+        } else {
+          showToast("No questions were extracted.", "warning");
+        }
+      } catch (err) {
+        showToast("Failed to extract questions: " + err.message, "error");
+      } finally {
+        loading.classList.remove('active');
+        resetExtractImage();
+      }
+    });
+  }
+
+  function handleExtractImage(file) {
+    if (!file.type.startsWith('image/')) {
+      showToast("Please select a valid image file.", "error");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Image is too large (max 5 MB).", "error");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const dataUrl = e.target.result;
+      currentExtractMime = file.type;
+      currentExtractImage = dataUrl.split(',')[1];
+      
+      extractThumb.src = dataUrl;
+      extractPreview.style.display = 'flex';
+      extractPlaceholder.style.display = 'none';
+      showToast("Image loaded for extraction!", "success");
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function resetExtractImage() {
+    currentExtractImage = null;
+    currentExtractMime = null;
+    if(extractThumb) extractThumb.src = '';
+    if(extractPreview) extractPreview.style.display = 'none';
+    if(extractPlaceholder) extractPlaceholder.style.display = 'flex';
+  }
 
   // Preview paper panel triggers
   document.getElementById('btn-preview-paper').addEventListener('click', openPrintPreview);
@@ -468,6 +652,22 @@ function openQuestionModal(qId = null) {
   diffSelect.value = "medium";
   marksInput.value = "2";
 
+  // Reset image and doc states
+  currentModalImage = null;
+  currentModalDoc = null;
+  const imgPlaceholder = document.getElementById('q-modal-image-placeholder');
+  const imgPreview = document.getElementById('q-modal-image-preview');
+  const imgThumb = document.getElementById('q-modal-image-thumb');
+  const docPreviewContainer = document.getElementById('q-modal-doc-preview-container');
+  const docPlaceholder = document.getElementById('q-modal-doc-placeholder');
+  
+  imgThumb.src = '';
+  imgPreview.style.display = 'none';
+  imgPlaceholder.style.display = 'flex';
+  
+  if (docPreviewContainer) docPreviewContainer.style.display = 'none';
+  if (docPlaceholder) docPlaceholder.style.display = 'flex';
+
   if (qId) {
     modalTitle.textContent = "Edit Question";
     const q = state.bankQuestions.find(item => item.id === qId);
@@ -480,6 +680,18 @@ function openQuestionModal(qId = null) {
       topicInput.value = q.topic;
       diffSelect.value = q.difficulty;
       marksInput.value = q.marks;
+
+      // Populate previews if question has attachments
+      if (q.image) {
+        currentModalImage = q.image;
+        updateAttachmentPreview(q.image, true);
+      }
+      if (q.document || (q.image && !q.image.startsWith('data:image/'))) {
+        // Fallback for older data that stored doc inside q.image
+        const docData = q.document || q.image;
+        currentModalDoc = docData;
+        updateAttachmentPreview(docData, false);
+      }
 
       if (q.type === 'mcq' && q.options) {
         optionsWrapper.style.display = "flex";
@@ -533,14 +745,16 @@ function saveQuestionFromModal() {
     // Edit existing
     const idx = state.bankQuestions.findIndex(q => q.id === id);
     if (idx !== -1) {
-      state.bankQuestions[idx] = { ...state.bankQuestions[idx], question, type, options, answer, subject, topic, difficulty, marks };
+      state.bankQuestions[idx] = { ...state.bankQuestions[idx], question, type, options, answer, subject, topic, difficulty, marks, image: currentModalImage || null, document: currentModalDoc || null };
       showToast("Question updated!", "success");
     }
   } else {
     // Create new
     const newQ = {
       id: 'custom-' + Date.now(),
-      question, type, options, answer, subject, topic, difficulty, marks
+      question, type, options, answer, subject, topic, difficulty, marks,
+      image: currentModalImage || null,
+      document: currentModalDoc || null
     };
     state.bankQuestions.unshift(newQ);
     showToast("Question added to bank!", "success");
@@ -552,6 +766,82 @@ function saveQuestionFromModal() {
   renderPaperCanvas();
   renderStats();
   saveState();
+}
+
+// Helper to update the attachment preview UI in the modal
+function updateAttachmentPreview(dataUrl, isImageZone) {
+  if (isImageZone) {
+    const imgPreview = document.getElementById('q-modal-image-preview');
+    const imgPlaceholder = document.getElementById('q-modal-image-placeholder');
+    const imgThumb = document.getElementById('q-modal-image-thumb');
+    
+    imgPreview.style.display = 'flex';
+    imgPlaceholder.style.display = 'none';
+    imgThumb.src = dataUrl;
+  } else {
+    const docPreviewContainer = document.getElementById('q-modal-doc-preview-container');
+    const docPlaceholder = document.getElementById('q-modal-doc-placeholder');
+    const docName = document.getElementById('q-modal-doc-name');
+    
+    docPreviewContainer.style.display = 'flex';
+    docPlaceholder.style.display = 'none';
+    
+    const match = dataUrl.match(/;name=([^;]+);base64,/);
+    if (match) {
+      docName.textContent = decodeURIComponent(match[1]);
+    } else {
+      docName.textContent = "Attached Document";
+    }
+  }
+}
+
+function processImageFileOnly(file) {
+  if (file.size > 5 * 1024 * 1024) {
+    showToast("Image is too large (max 5 MB).", "error");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const MAX_WIDTH = 800;
+      let width = img.width;
+      let height = img.height;
+      if (width > MAX_WIDTH) {
+        height = Math.round((height * MAX_WIDTH) / width);
+        width = MAX_WIDTH;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      currentModalImage = dataUrl;
+      updateAttachmentPreview(dataUrl, true);
+      showToast("Image attached!", "success");
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function processDocFileOnly(file) {
+  if (file.size > 1 * 1024 * 1024) {
+    showToast("Document is too large (max 1 MB).", "error");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    let dataUrl = e.target.result;
+    const namePart = `;name=${encodeURIComponent(file.name)}`;
+    dataUrl = dataUrl.replace(';base64,', namePart + ';base64,');
+    currentModalDoc = dataUrl;
+    updateAttachmentPreview(dataUrl, false);
+    showToast("Document attached!", "success");
+  };
+  reader.readAsDataURL(file);
 }
 
 // Clear bank helper
@@ -686,6 +976,13 @@ function renderQuestionBank() {
     card.innerHTML = `
       ${badgesHtml}
       <div class="question-card-text">${q.question}</div>
+      ${q.image && q.image.startsWith('data:image/') ? `<img src="${q.image}" alt="Question image" class="question-card-image">` : ''}
+      ${q.document ? `
+        <div style="margin-top:0.5rem; padding: 0.5rem; background: var(--bg-hover); border-radius: 6px; display: flex; align-items: center; gap: 0.5rem; border: 1px solid var(--border-color);">
+          <i data-lucide="paperclip" style="color: var(--primary); width: 16px; height: 16px;"></i>
+          <span style="font-size: 0.8rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${q.document.match(/;name=([^;]+);base64,/) ? decodeURIComponent(q.document.match(/;name=([^;]+);base64,/)[1]) : "Attached Document"}</span>
+        </div>
+      ` : ''}
       ${optionsHtml}
       <div class="question-card-footer">
         <div class="answer-key-preview" title="Correct Answer">
@@ -888,6 +1185,13 @@ function renderPaperCanvas() {
           <div class="paper-question-number">${qIdx + 1}.</div>
           <div class="paper-question-content">
             <div class="paper-question-text">${q.question}</div>
+            ${q.image && q.image.startsWith('data:image/') ? `<img src="${q.image}" alt="Question image" class="paper-question-image">` : ''}
+            ${q.document ? `
+              <div style="margin-top:0.5rem; padding: 0.5rem; background: var(--bg-app); border-radius: 4px; display: flex; align-items: center; gap: 0.5rem; border: 1px solid var(--border-color);">
+                <i data-lucide="file-text" style="color: var(--text-muted); width: 16px; height: 16px;"></i>
+                <span style="font-size: 0.8125rem; color: var(--text-muted);">${q.document.match(/;name=([^;]+);base64,/) ? decodeURIComponent(q.document.match(/;name=([^;]+);base64,/)[1]) : "Attached Document"}</span>
+              </div>
+            ` : ''}
             
             ${q.type === 'mcq' && q.options ? `
               <div class="print-q-opts" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.25rem; font-size: 0.8125rem; color: var(--text-muted); margin-top: 0.25rem;">
@@ -1096,10 +1400,18 @@ function showToast(message, type = "info") {
   }, 4000);
 }
 
-// Load and Process uploaded book (PDF)
+// Load and Process uploaded book (PDF) or route image to extraction
 async function handleBookUpload(file) {
-  if (!file || file.type !== 'application/pdf') {
-    showToast("Please upload a valid PDF book.", "error");
+  if (!file) return;
+  
+  if (file.type.startsWith('image/')) {
+    openModal('image-extract-modal-overlay');
+    handleExtractImage(file);
+    return;
+  }
+  
+  if (file.type !== 'application/pdf') {
+    showToast("Please upload a valid PDF book or image.", "error");
     return;
   }
   
@@ -2121,6 +2433,12 @@ function renderPrintPreviewCanvas() {
             <div class="print-q-text">
               <strong>Q${globalQIndex}.</strong> ${q.question}
             </div>
+            ${q.image && q.image.startsWith('data:image/') ? `<img src="${q.image}" alt="Q${globalQIndex} image" class="print-q-image">` : ''}
+            ${q.document ? `
+              <div style="margin-top:0.25rem; font-size:0.8rem; color: #555;">
+                <em>[Attached Document: ${q.document.match(/;name=([^;]+);base64,/) ? decodeURIComponent(q.document.match(/;name=([^;]+);base64,/)[1]) : "Document"}]</em>
+              </div>
+            ` : ''}
             ${optionsHtml}
           </div>
           ${marksHtml}
