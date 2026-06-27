@@ -55,6 +55,24 @@
   padding: 0;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
+  scroll-behavior: smooth;
+}
+
+/* Custom Premium Scrollbar for Chrome/Webkit */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 6px;
+  transition: background 0.3s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 body {
@@ -64,12 +82,14 @@ body {
   height: 100vh;
   display: flex;
   overflow: hidden;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 button, input, select, textarea {
   font-family: inherit;
   color: inherit;
+  outline: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Layout */
@@ -322,12 +342,20 @@ button, input, select, textarea {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.theme-toggle i {
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .theme-toggle:hover {
   background-color: var(--bg-card-hover);
   border-color: var(--text-muted);
+}
+
+.theme-toggle:hover i {
+  transform: rotate(45deg) scale(1.12);
 }
 
 .btn-primary {
@@ -503,9 +531,9 @@ button, input, select, textarea {
 }
 
 .question-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-4px) scale(1.01);
   border-color: var(--primary);
-  box-shadow: var(--shadow);
+  box-shadow: 0 10px 20px -8px rgba(99, 102, 241, 0.3);
 }
 
 .question-card-meta {
@@ -1328,6 +1356,453 @@ input:checked + .slider:before {
   color: #333;
   margin-top: 0.25rem;
   padding-left: 1rem;
+}
+
+/* Book Explorer Styling */
+.book-explorer-box {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 1rem;
+  background-color: var(--bg-card);
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.book-info-card {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: var(--bg-app);
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+}
+
+.chapters-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.chapters-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 250px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.chapter-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-app);
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.chapter-item:hover {
+  border-color: var(--primary);
+  background-color: var(--bg-card-hover);
+}
+
+.btn-icon-link {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem;
+  border-radius: 4px;
+  transition: color 0.2s ease, background-color 0.2s ease, transform 0.1s ease;
+}
+
+.btn-icon-link:hover {
+  color: var(--text-active);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.btn-icon-link:active {
+  transform: scale(0.92);
+}
+
+/* Sidebar Collapsed State (Desktop) */
+.sidebar.collapsed {
+  width: 0;
+  border-right-width: 0;
+  overflow: hidden;
+}
+
+.sidebar.collapsed .sidebar-header,
+.sidebar.collapsed .sidebar-content {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Sidebar Menu Button & Header Alignment */
+.mobile-menu-btn {
+  display: none; /* Hidden on desktop by default */
+  background: none;
+  border: none;
+  color: var(--text-main);
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 8px;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  flex-shrink: 0;
+}
+
+.mobile-menu-btn:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-active);
+}
+
+.mobile-menu-btn:active {
+  transform: scale(0.92);
+}
+
+.mobile-menu-btn i {
+  width: 20px;
+  height: 20px;
+}
+
+.top-nav-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  overflow: hidden;
+}
+
+/* Sidebar Overlay */
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 8;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.sidebar-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* Mobile Tabs switcher styles */
+.workspace-tabs {
+  display: none; /* Hidden on desktop */
+  background-color: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.5rem 1rem;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.workspace-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 0.625rem;
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.workspace-tab:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-main);
+}
+
+.workspace-tab.active {
+  background-color: var(--primary-glow);
+  color: var(--primary);
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.2);
+}
+
+.workspace-tab i {
+  width: 14px;
+  height: 14px;
+}
+
+.section-popover {
+  max-width: 280px;
+  box-shadow: var(--shadow-lg) !important;
+  border: 1px solid var(--border-color) !important;
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Premium Focus Outline Glow */
+input:focus, select:focus, textarea:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px var(--primary-glow) !important;
+}
+
+/* Premium Interactive Elements Micro-Scale */
+.btn-primary:hover, .btn-secondary:hover {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 4px 12px var(--primary-glow);
+}
+.btn-primary:active, .btn-secondary:active {
+  transform: translateY(0) scale(0.98);
+}
+.btn-icon:hover {
+  transform: scale(1.06);
+}
+.btn-icon:active {
+  transform: scale(0.94);
+}
+
+/* If sidebar is collapsed on desktop, show the toggle menu button in top-nav */
+.sidebar.collapsed ~ .workspace-wrapper .mobile-menu-btn {
+  display: flex;
+}
+
+/* Tablet Layout Media Queries (<= 1024px) */
+@media (max-width: 1024px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    transform: translateX(-100%);
+    z-index: 100;
+    width: 300px;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .sidebar.active {
+    transform: translateX(0);
+  }
+  
+  .sidebar.active.collapsed {
+    /* override desktop collapse behavior inside mobile active state */
+    width: 300px;
+  }
+  
+  .sidebar.active.collapsed .sidebar-header,
+  .sidebar.active.collapsed .sidebar-content {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  /* Show toggle menu button always on tablet/mobile */
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  /* Show tabs switcher */
+  .workspace-tabs {
+    display: flex;
+  }
+
+  .split-pane {
+    flex-direction: row;
+    position: relative;
+  }
+
+  /* Switch active pane based on chosen tab */
+  .pane-left, .pane-right {
+    width: 100% !important;
+    flex: none !important;
+    display: none;
+    height: 100%;
+  }
+
+  .workspace-wrapper[data-active-tab="bank"] .pane-left {
+    display: flex;
+  }
+
+  .workspace-wrapper[data-active-tab="canvas"] .pane-right {
+    display: flex;
+  }
+}
+
+/* Mobile Layout Media Queries (<= 768px) */
+@media (max-width: 768px) {
+  .top-nav {
+    padding: 0 1rem;
+    height: 60px;
+  }
+
+  .top-nav-title p {
+    display: none; /* Hide subtitle to conserve vertical space */
+  }
+
+  .nav-actions {
+    gap: 0.5rem;
+  }
+
+  .btn-primary, .btn-secondary {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    border-radius: 6px;
+  }
+
+  .filter-row {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .paper-input-group {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .mcq-options-form {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .editor-canvas-container {
+    padding: 1rem;
+  }
+
+  .editor-canvas {
+    padding: 1.5rem;
+    min-height: auto;
+    border-radius: 8px;
+  }
+
+  .paper-meta-form {
+    padding-bottom: 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .paper-stats-bar {
+    padding: 0.75rem 1rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .stat-item {
+    justify-content: flex-start;
+  }
+
+  .stat-info {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .stat-distribution {
+    width: 120px;
+  }
+
+  /* Modals */
+  .modal {
+    width: 95%;
+    max-height: 85vh;
+    border-radius: 8px;
+  }
+
+  .modal-body {
+    padding: 1.25rem;
+    gap: 1rem;
+  }
+
+  .modal-footer {
+    padding: 0.75rem 1.25rem;
+  }
+
+  /* Print Settings */
+  .print-settings-bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 1rem;
+    gap: 0.75rem;
+    height: auto;
+    overflow-y: auto;
+    max-height: 180px;
+  }
+
+  .print-settings-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .print-setting {
+    justify-content: space-between;
+  }
+
+  .print-preview-header {
+    padding: 1rem;
+    height: auto;
+    min-height: 60px;
+    flex-direction: column;
+    gap: 0.75rem;
+    justify-content: center;
+  }
+
+  .print-preview-header > div {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  /* Responsive containment for print paper preview */
+  .print-preview-body {
+    padding: 1rem 0.5rem;
+    overflow-x: auto;
+  }
+
+  .print-paper-canvas {
+    width: 100% !important;
+    min-height: auto;
+    padding: 15mm 10mm;
+    margin: 0;
+    box-shadow: none;
+    border-radius: 0;
+  }
+}
+
+/* Very Small Mobile Phones (<= 480px) */
+@media (max-width: 480px) {
+  .logo span {
+    font-size: 1.1rem;
+  }
+  
+  .btn-preview-paper span {
+    display: none; /* Show only preview eye icon on ultra-small screens */
+  }
+
+  .btn-preview-paper {
+    padding: 0.625rem;
+    border-radius: 50%;
+  }
+
+  .print-q-opts {
+    grid-template-columns: 1fr;
+  }
+
+  .question-options-list {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* @media print CSS rules */

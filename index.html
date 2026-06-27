@@ -26,33 +26,60 @@
   <div class="app-container">
     
     <!-- Sidebar / Utility Panel -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="app-sidebar">
       <div class="sidebar-header">
         <div class="logo">
           <i data-lucide="sparkles"></i>
           <span>AuraPaper</span>
         </div>
+        <button class="btn-icon-link" id="btn-toggle-sidebar" title="Toggle Sidebar">
+          <i data-lucide="chevron-left" id="sidebar-toggle-icon"></i>
+        </button>
       </div>
       
       <div class="sidebar-content">
         <!-- Document Upload Section -->
         <div>
-          <div class="sidebar-section-title">Import Source Files</div>
+          <div class="sidebar-section-title">Upload Textbook (PDF)</div>
           <div class="dropzone" id="upload-dropzone">
-            <i data-lucide="file-up" class="dropzone-icon"></i>
-            <span class="dropzone-text">Upload PDF or Image</span>
+            <i data-lucide="book-open" class="dropzone-icon"></i>
+            <span class="dropzone-text">Upload Book PDF</span>
             <span class="dropzone-subtext">Drag & drop or browse</span>
-            <input type="file" id="file-input" accept="application/pdf, image/png, image/jpeg" multiple>
+            <input type="file" id="file-input" accept="application/pdf">
             
             <!-- Loading indicator for upload -->
             <div class="loading-overlay" id="upload-loading">
               <i data-lucide="loader-2" class="spinner" style="font-size: 2rem; color: var(--primary);"></i>
-              <span id="loading-text" style="font-size: 0.8125rem;">Extracting content...</span>
+              <span id="loading-text" style="font-size: 0.8125rem;">Extracting chapters...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Book Explorer & Chapters Panel -->
+        <div class="book-explorer-box" id="book-explorer-box" style="display: none;">
+          <div class="sidebar-section-title chapters-header">
+            <span>Book Explorer</span>
+            <button id="btn-close-book" title="Unload Book" class="btn-icon-link">
+              <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+            </button>
+          </div>
+          <div class="book-info-card">
+            <i data-lucide="book" style="color: var(--primary); width: 20px; height: 20px; flex-shrink: 0;"></i>
+            <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
+              <div id="book-title" style="font-weight: 600; font-size: 0.8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">No Book Loaded</div>
+              <div id="book-pages" style="font-size: 0.7rem; color: var(--text-muted);">0 Pages</div>
             </div>
           </div>
           
-          <!-- File processing queue -->
-          <div class="file-queue" id="file-queue"></div>
+          <div class="chapters-header">
+            <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Chapters</span>
+            <button id="btn-add-chapter" style="font-size: 0.75rem; display: flex; align-items: center; gap: 0.25rem; background: none; border: none; color: var(--primary); cursor: pointer; font-weight: 500; padding: 0;">
+              <i data-lucide="plus" style="width: 12px; height: 12px;"></i> Add Chapter
+            </button>
+          </div>
+          <div class="chapters-list" id="chapters-list">
+            <!-- Chapters rendered dynamically -->
+          </div>
         </div>
         
         <!-- API Setup Panel -->
@@ -88,14 +115,22 @@
       </div>
     </aside>
     
+    <!-- Sidebar Overlay for mobile drawer backdrop -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    
     <!-- Main Workspace -->
     <div class="workspace-wrapper">
       
       <!-- Top Nav -->
       <header class="top-nav">
-        <div class="top-nav-title">
-          <h1 id="paper-main-title">New Question Paper</h1>
-          <p id="paper-main-subtitle">Build, customize, and export printable exams</p>
+        <div class="top-nav-left">
+          <button class="btn-icon-link mobile-menu-btn" id="btn-mobile-menu" title="Toggle Sidebar">
+            <i data-lucide="menu"></i>
+          </button>
+          <div class="top-nav-title">
+            <h1 id="paper-main-title">New Question Paper</h1>
+            <p id="paper-main-subtitle">Build, customize, and export printable exams</p>
+          </div>
         </div>
         <div class="nav-actions">
           <button class="theme-toggle" id="theme-toggle" title="Toggle Theme">
@@ -107,8 +142,20 @@
         </div>
       </header>
       
+      <!-- Mobile View switcher tabs -->
+      <div class="workspace-tabs" id="workspace-tabs">
+        <button class="workspace-tab active" data-tab="bank">
+          <i data-lucide="archive"></i>
+          <span>Question Bank</span>
+        </button>
+        <button class="workspace-tab" data-tab="canvas">
+          <i data-lucide="file-text"></i>
+          <span>Paper Canvas</span>
+        </button>
+      </div>
+      
       <!-- Split Pane (Bank | Canvas) -->
-      <div class="split-pane">
+      <div class="split-pane" id="workspace-split-pane">
         
         <!-- Left Pane: Question Bank -->
         <section class="pane-left">
@@ -118,8 +165,8 @@
               <span>Question Bank</span>
               <span id="bank-count-badge" class="badge" style="background-color: var(--primary); color: white; margin-left: 0.5rem;">15</span>
             </div>
-            <button class="btn-card" id="btn-clear-bank" title="Reset bank to default questions" style="font-size: 0.75rem; display: flex; align-items: center; gap: 0.25rem;">
-              <i data-lucide="rotate-ccw"></i> Reset
+            <button class="btn-card" id="btn-clear-bank" title="Clear all questions in the bank" style="font-size: 0.75rem; display: flex; align-items: center; gap: 0.25rem; color: var(--danger);">
+              <i data-lucide="trash-2"></i> Clear Bank
             </button>
           </div>
           
@@ -536,11 +583,102 @@
     </div>
   </div>
 
+  <!-- CHAPTER GENERATION CONFIG MODAL -->
+  <div class="modal-overlay" id="chapter-gen-modal-overlay">
+    <div class="modal" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 id="chapter-gen-modal-title">Generate Chapter Questions</h3>
+        <button class="modal-close" onclick="closeModal('chapter-gen-modal-overlay')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.875rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 1rem;">
+          Generate structured questions based on the text of the selected chapter using Gemini AI.
+        </p>
+        <input type="hidden" id="gen-chapter-id">
+        
+        <div class="form-group">
+          <label for="chapter-gen-count">Number of Questions</label>
+          <select id="chapter-gen-count">
+            <option value="5" selected>5 Questions</option>
+            <option value="10">10 Questions</option>
+            <option value="15">15 Questions</option>
+            <option value="20">20 Questions</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="chapter-gen-type">Question Type</label>
+          <select id="chapter-gen-type">
+            <option value="mix" selected>Mixed Types</option>
+            <option value="mcq">Multiple Choice Questions (MCQ)</option>
+            <option value="short">Short Answer Questions</option>
+            <option value="long">Long Answer Questions</option>
+            <option value="fill">Fill in the Blanks</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="chapter-gen-difficulty">Difficulty Level</label>
+          <select id="chapter-gen-difficulty">
+            <option value="mix" selected>Mixed (Easy/Med/Hard)</option>
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="chapter-gen-marks">Base Marks per Question</label>
+          <input type="number" id="chapter-gen-marks" min="1" max="20" placeholder="e.g. 2 (Leave empty for type-default)">
+          <span style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.25rem;">Default marks: MCQ (1M), Short (2M), Long (5M), Fill (1M)</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal('chapter-gen-modal-overlay')">Cancel</button>
+        <button class="btn-primary" id="btn-trigger-chapter-gen">
+          <i data-lucide="sparkles"></i> Generate Questions
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD / EDIT CHAPTER MODAL -->
+  <div class="modal-overlay" id="chapter-edit-modal-overlay">
+    <div class="modal" style="max-width: 450px;">
+      <div class="modal-header">
+        <h3 id="chapter-edit-modal-title">Add Chapter</h3>
+        <button class="modal-close" onclick="closeModal('chapter-edit-modal-overlay')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="chapter-edit-id">
+        
+        <div class="form-group">
+          <label for="chapter-modal-title">Chapter Title</label>
+          <input type="text" id="chapter-modal-title" placeholder="e.g. Chapter 1: Introduction to Mechanics" required>
+        </div>
+
+        <div class="paper-input-group">
+          <div class="form-group">
+            <label for="chapter-modal-start">Start Page</label>
+            <input type="number" id="chapter-modal-start" min="1" required>
+          </div>
+          <div class="form-group">
+            <label for="chapter-modal-end">End Page</label>
+            <input type="number" id="chapter-modal-end" min="1" required>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal('chapter-edit-modal-overlay')">Cancel</button>
+        <button class="btn-primary" id="btn-save-chapter">Save Chapter</button>
+      </div>
+    </div>
+  </div>
+
   <!-- TOAST CONTAINER FOR NOTIFICATIONS -->
   <div class="toast-container" id="toast-container"></div>
 
   <!-- Main JavaScript File -->
-  <script src="mock-data.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

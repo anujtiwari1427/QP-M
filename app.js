@@ -50,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderQuestionBank();
   renderPaperCanvas();
   renderStats();
+  renderBookExplorer();
   
   // Create icons
   lucide.createIcons();
@@ -77,10 +78,10 @@ function loadState() {
     try {
       state.bankQuestions = JSON.parse(savedBank);
     } catch(e) {
-      state.bankQuestions = [...MOCK_QUESTIONS];
+      state.bankQuestions = [];
     }
   } else {
-    state.bankQuestions = [...MOCK_QUESTIONS];
+    state.bankQuestions = [];
   }
 
   const savedMeta = localStorage.getItem('aura_paper_meta');
@@ -94,6 +95,20 @@ function loadState() {
   if (savedSections) {
     try {
       state.paperSections = JSON.parse(savedSections);
+    } catch(e) {}
+  }
+
+  const savedBook = localStorage.getItem('aura_uploaded_book');
+  if (savedBook) {
+    try {
+      state.uploadedBook = JSON.parse(savedBook);
+    } catch(e) {}
+  }
+
+  const savedChapters = localStorage.getItem('aura_chapters');
+  if (savedChapters) {
+    try {
+      state.chapters = JSON.parse(savedChapters);
     } catch(e) {}
   }
 
@@ -112,6 +127,17 @@ function saveState() {
   localStorage.setItem('aura_question_bank', JSON.stringify(state.bankQuestions));
   localStorage.setItem('aura_paper_meta', JSON.stringify(state.paperMeta));
   localStorage.setItem('aura_paper_sections', JSON.stringify(state.paperSections));
+  
+  if (state.uploadedBook) {
+    localStorage.setItem('aura_uploaded_book', JSON.stringify(state.uploadedBook));
+  } else {
+    localStorage.removeItem('aura_uploaded_book');
+  }
+  if (state.chapters) {
+    localStorage.setItem('aura_chapters', JSON.stringify(state.chapters));
+  } else {
+    localStorage.removeItem('aura_chapters');
+  }
 }
 
 // UI Initialization
@@ -135,8 +161,8 @@ function setupEventListeners() {
   document.getElementById('filter-difficulty').addEventListener('change', renderQuestionBank);
   document.getElementById('filter-type').addEventListener('change', renderQuestionBank);
 
-  // Reset Bank
-  document.getElementById('btn-clear-bank').addEventListener('click', resetBankToDefault);
+  // Clear Bank
+  document.getElementById('btn-clear-bank').addEventListener('click', clearBank);
 
   // Clear Canvas
   document.getElementById('btn-clear-canvas').addEventListener('click', clearCanvas);
@@ -198,15 +224,31 @@ function setupEventListeners() {
     dropzone.classList.remove('dragover');
     const files = e.dataTransfer.files;
     if (files.length > 0) {
-      handleFilesImport(files);
+      handleBookUpload(files[0]);
     }
   });
 
   fileInput.addEventListener('change', (e) => {
     if (e.target.files.length > 0) {
-      handleFilesImport(e.target.files);
+      handleBookUpload(e.target.files[0]);
     }
   });
+
+  // Book chapters actions
+  document.getElementById('btn-close-book').addEventListener('click', () => {
+    if (confirm("Are you sure you want to unload this book? Chapters list will be cleared.")) {
+      state.uploadedBook = null;
+      state.chapters = [];
+      window.currentBookArrayBuffer = null;
+      window.currentPdfDoc = null;
+      saveState();
+      renderBookExplorer();
+      showToast("Book unloaded.", "warning");
+    }
+  });
+  document.getElementById('btn-add-chapter').addEventListener('click', () => openChapterEditModal());
+  document.getElementById('btn-save-chapter').addEventListener('click', saveChapter);
+  document.getElementById('btn-trigger-chapter-gen').addEventListener('click', triggerChapterQuestionGeneration);
 
   // Modal Save Question
   document.getElementById('modal-save-q-btn').addEventListener('click', saveQuestionFromModal);
@@ -265,6 +307,72 @@ function setupEventListeners() {
   document.getElementById('print-setting-margin').addEventListener('change', applyPrintStyles);
   document.getElementById('print-toggle-answers').addEventListener('change', renderPrintPreviewCanvas);
   document.getElementById('print-toggle-marks').addEventListener('change', renderPrintPreviewCanvas);
+
+  // Responsive UI Event Listeners
+  const sidebar = document.getElementById('app-sidebar');
+  const toggleBtn = document.getElementById('btn-toggle-sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  const mobileMenuBtn = document.getElementById('btn-mobile-menu');
+
+  if (toggleBtn && sidebar) {
+    toggleBtn.addEventListener('click', () => {
+      if (window.innerWidth <= 1024) {
+        // Mobile close behavior
+        sidebar.classList.remove('active');
+        if (overlay) overlay.classList.remove('active');
+      } else {
+        // Desktop collapse behavior
+        sidebar.classList.toggle('collapsed');
+        const icon = toggleBtn.querySelector('i');
+        if (icon) {
+          if (sidebar.classList.contains('collapsed')) {
+            icon.setAttribute('data-lucide', 'chevron-right');
+          } else {
+            icon.setAttribute('data-lucide', 'chevron-left');
+          }
+          lucide.createIcons();
+        }
+      }
+    });
+  }
+
+  if (mobileMenuBtn && sidebar) {
+    mobileMenuBtn.addEventListener('click', () => {
+      sidebar.classList.toggle('active');
+      if (overlay) overlay.classList.toggle('active');
+    });
+  }
+
+  if (overlay && sidebar) {
+    overlay.addEventListener('click', () => {
+      sidebar.classList.remove('active');
+      overlay.classList.remove('active');
+    });
+  }
+
+  // Workspace View Switcher Tabs (Mobile/Tablet)
+  const wrapper = document.querySelector('.workspace-wrapper');
+  if (wrapper) {
+    wrapper.setAttribute('data-active-tab', 'bank'); // Default selection
+  }
+
+  const tabBtns = document.querySelectorAll('.workspace-tab');
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabName = btn.getAttribute('data-tab');
+      if (wrapper) {
+        wrapper.setAttribute('data-active-tab', tabName);
+      }
+      tabBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      // Close sidebar drawer if open when switching tabs
+      if (sidebar && window.innerWidth <= 1024) {
+        sidebar.classList.remove('active');
+        if (overlay) overlay.classList.remove('active');
+      }
+    });
+  });
 }
 
 // Save Key Helper
@@ -446,16 +554,16 @@ function saveQuestionFromModal() {
   saveState();
 }
 
-// Reset bank helper
-function resetBankToDefault() {
-  if (confirm("Are you sure you want to reset the Question Bank to default sample questions? Current custom additions will be lost.")) {
-    state.bankQuestions = [...MOCK_QUESTIONS];
+// Clear bank helper
+function clearBank() {
+  if (confirm("Are you sure you want to clear all questions in the Question Bank?")) {
+    state.bankQuestions = [];
     populateFilters();
     renderQuestionBank();
     renderPaperCanvas();
     renderStats();
     saveState();
-    showToast("Question Bank reset to defaults.", "success");
+    showToast("Question Bank cleared.", "warning");
   }
 }
 
@@ -988,145 +1096,647 @@ function showToast(message, type = "info") {
   }, 4000);
 }
 
-// Load and Process uploaded files (PDF/Images)
-async function handleFilesImport(files) {
-  const apiKey = state.apiKey;
+// Load and Process uploaded book (PDF)
+async function handleBookUpload(file) {
+  if (!file || file.type !== 'application/pdf') {
+    showToast("Please upload a valid PDF book.", "error");
+    return;
+  }
+  
   const loading = document.getElementById('upload-loading');
   const statusEl = document.getElementById('loading-text');
   
   loading.classList.add('active');
-  
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    statusEl.textContent = `Reading ${file.name}...`;
+  statusEl.textContent = `Reading ${file.name}...`;
 
-    try {
-      if (file.type === 'application/pdf') {
-        const arrayBuffer = await file.arrayBuffer();
-        statusEl.textContent = `Extracting PDF layers...`;
-        
-        // Load document
-        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-        const pdf = await loadingTask.promise;
-        let pdfText = "";
-        let scanned = false;
-        
-        // Read text content
-        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-          statusEl.textContent = `Reading page ${pageNum}/${pdf.numPages}...`;
-          const page = await pdf.getPage(pageNum);
-          const textContent = await page.getTextContent();
-          const pageText = textContent.items.map(item => item.str).join(' ');
-          
-          if (pageText.trim().length > 30) {
-            pdfText += pageText + "\n";
-          } else {
-            scanned = true;
-          }
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    statusEl.textContent = `Extracting PDF layers...`;
+    
+    // Load document
+    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+    const pdf = await loadingTask.promise;
+    
+    // Check if re-linking
+    if (state.uploadedBook && state.uploadedBook.name === file.name && state.uploadedBook.totalPages === pdf.numPages) {
+      window.currentBookArrayBuffer = arrayBuffer;
+      window.currentPdfDoc = pdf;
+      showToast("Book PDF linked successfully!", "success");
+      renderBookExplorer();
+      return;
+    }
+
+    state.uploadedBook = {
+      name: file.name,
+      totalPages: pdf.numPages
+    };
+    
+    window.currentBookArrayBuffer = arrayBuffer;
+    window.currentPdfDoc = pdf;
+    
+    statusEl.textContent = `Extracting chapters...`;
+    
+    // 1. Try Outline bookmarks
+    let extractedChapters = await extractChaptersFromOutline(pdf);
+    
+    // 2. If empty and API key is set, try Gemini TOC Extraction
+    if ((!extractedChapters || extractedChapters.length < 2) && state.apiKey) {
+      statusEl.textContent = `No bookmarks found. Extracting TOC via Gemini AI...`;
+      try {
+        const tocText = await extractTOCText(pdf);
+        extractedChapters = await extractChaptersWithAIFromTOC(tocText, pdf.numPages);
+      } catch (aiErr) {
+        console.warn("AI TOC extraction failed", aiErr);
+      }
+    }
+    
+    // 3. Fallback to local regex scanning
+    if (!extractedChapters || extractedChapters.length < 2) {
+      statusEl.textContent = `Using local regex scanner to find chapters...`;
+      extractedChapters = await extractChaptersByRegex(pdf, (msg) => {
+        statusEl.textContent = msg;
+      });
+    }
+    
+    // If still empty, initialize with default
+    if (!extractedChapters || extractedChapters.length === 0) {
+      extractedChapters = [
+        {
+          id: 'ch-default',
+          chapterNumber: 1,
+          title: 'Full Book / General Content',
+          startPage: 1,
+          endPage: pdf.numPages
         }
-        
-        if (scanned) {
-          // If we detect a scanned PDF, we convert pages to images and run Tesseract or Gemini
-          statusEl.textContent = `PDF is scanned. Running OCR...`;
-          let ocrText = "";
-          
-          for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-            statusEl.textContent = `OCR page ${pageNum}/${pdf.numPages}...`;
-            const page = await pdf.getPage(pageNum);
-            const viewport = page.getViewport({ scale: 1.5 });
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-            
-            await page.render({ canvasContext: context, viewport: viewport }).promise;
-            
-            if (apiKey) {
-              const dataUrl = canvas.toDataURL('image/jpeg');
-              const base64Data = dataUrl.split(',')[1];
-              statusEl.textContent = `AI analysis Page ${pageNum}...`;
-              const parsedQs = await extractQuestionsWithAI(base64Data, true, 'image/jpeg');
-              if (parsedQs && parsedQs.length > 0) {
-                appendQuestionsToBank(parsedQs);
-              }
-            } else {
-              // Fallback Tesseract
-              const result = await Tesseract.recognize(canvas, 'eng', {
-                logger: m => {
-                  if (m.status === 'recognizing') {
-                    statusEl.textContent = `OCR Page ${pageNum}: ${(m.progress * 100).toFixed(0)}%`;
-                  }
-                }
-              });
-              ocrText += result.data.text + "\n";
+      ];
+      showToast("No chapters automatically detected. Created default chapter.", "warning");
+    } else {
+      showToast(`Successfully loaded book with ${extractedChapters.length} chapters!`, "success");
+    }
+    
+    state.chapters = extractedChapters;
+    
+    saveState();
+    renderBookExplorer();
+    
+  } catch (err) {
+    console.error(err);
+    showToast(`Failed to parse book PDF: ${err.message}`, "error");
+  } finally {
+    loading.classList.remove('active');
+  }
+}
+
+// Extract chapters from bookmarks outline
+async function extractChaptersFromOutline(pdf) {
+  try {
+    const outline = await pdf.getOutline();
+    if (!outline || outline.length === 0) return null;
+
+    const items = [];
+    async function traverse(node) {
+      if (node.dest) {
+        let pageIdx = -1;
+        if (Array.isArray(node.dest)) {
+          const ref = node.dest[0];
+          if (ref && typeof ref === 'object') {
+            try { pageIdx = await pdf.getPageIndex(ref); } catch (e) {}
+          }
+        } else if (typeof node.dest === 'string') {
+          try {
+            const destRef = await pdf.getDestination(node.dest);
+            if (destRef && Array.isArray(destRef)) {
+              pageIdx = await pdf.getPageIndex(destRef[0]);
             }
-          }
-          
-          if (!apiKey && ocrText.trim()) {
-            const parsedQs = parseQuestionsLocally(ocrText);
-            appendQuestionsToBank(parsedQs);
-          }
-        } else {
-          // Text-based PDF extraction
-          if (apiKey) {
-            statusEl.textContent = `AI parsing extracted text...`;
-            const parsedQs = await extractQuestionsWithAI(pdfText, false);
-            appendQuestionsToBank(parsedQs);
-          } else {
-            statusEl.textContent = `Parsing text locally...`;
-            const parsedQs = parseQuestionsLocally(pdfText);
-            appendQuestionsToBank(parsedQs);
-            showToast("Imported with local parser. Add a Gemini API key for cleaner extraction.", "warning");
-          }
+          } catch (e) {}
         }
-      } 
-      // Image upload
-      else if (file.type.startsWith('image/')) {
-        if (apiKey) {
-          statusEl.textContent = `Converting image base64...`;
-          const base64 = await fileToBase64(file);
-          statusEl.textContent = `Gemini AI extracting questions...`;
-          const parsedQs = await extractQuestionsWithAI(base64, true, file.type);
-          appendQuestionsToBank(parsedQs);
-        } else {
-          statusEl.textContent = `Initializing local OCR...`;
-          const ocrResult = await Tesseract.recognize(file, 'eng', {
-            logger: m => {
-              if (m.status === 'recognizing') {
-                statusEl.textContent = `Local OCR: ${(m.progress * 100).toFixed(0)}%`;
-              }
-            }
+        if (pageIdx !== -1) {
+          items.push({
+            title: node.title,
+            startPage: pageIdx + 1
           });
-          statusEl.textContent = `Parsing OCR text...`;
-          const parsedQs = parseQuestionsLocally(ocrResult.data.text);
-          appendQuestionsToBank(parsedQs);
-          showToast("Image OCR parsed locally. Set API key for improved parsing.", "warning");
         }
       }
-      showToast(`Successfully extracted from ${file.name}`, "success");
-    } catch(err) {
-      console.error(err);
-      showToast(`Failed to parse ${file.name}: ${err.message}`, "error");
+      if (node.items && node.items.length > 0) {
+        for (const child of node.items) {
+          await traverse(child);
+        }
+      }
+    }
+
+    for (const topItem of outline) {
+      await traverse(topItem);
+    }
+
+    if (items.length === 0) return null;
+
+    // Sort by startPage
+    items.sort((a, b) => a.startPage - b.startPage);
+
+    // Calculate endPage for each
+    const chapters = [];
+    for (let i = 0; i < items.length; i++) {
+      const current = items[i];
+      const next = items[i + 1];
+      const endPage = next ? next.startPage - 1 : pdf.numPages;
+      
+      chapters.push({
+        id: 'ch-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+        chapterNumber: i + 1,
+        title: current.title,
+        startPage: current.startPage,
+        endPage: Math.max(current.startPage, endPage)
+      });
+    }
+    return chapters;
+  } catch (err) {
+    console.error("Failed to parse outline", err);
+    return null;
+  }
+}
+
+// Extract Table of Contents text from first few pages
+async function extractTOCText(pdf) {
+  const maxTOCPages = Math.min(12, pdf.numPages);
+  let tocText = "";
+  for (let pageNum = 1; pageNum <= maxTOCPages; pageNum++) {
+    try {
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map(item => item.str).join(' ');
+      tocText += `--- Page ${pageNum} ---\n` + pageText + "\n";
+    } catch (e) {
+      console.warn("Failed to extract page " + pageNum, e);
     }
   }
+  return tocText;
+}
 
-  loading.classList.remove('active');
-  populateFilters();
-  renderQuestionBank();
+// AI Table of Contents Chapter extractor
+async function extractChaptersWithAIFromTOC(tocText, totalPages) {
+  const apiKey = state.apiKey;
+  if (!apiKey) return null;
+  
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  
+  const prompt = `You are a textbook parsing assistant. Analyze this Table of Contents (TOC) text from a book with ${totalPages} total pages.
+Identify the chapters, their names, and their starting page numbers.
+If starting page numbers are not explicitly mentioned in the text, estimate them based on the total number of pages (${totalPages}) and the ordering of chapters.
+Ensure that page numbers are valid integers. The end page of each chapter should be the start page of the next chapter minus 1, and the last chapter should end at page ${totalPages}.
+
+Return ONLY a JSON array of chapter objects. Do not include markdown code blocks or additional text.
+JSON Schema:
+[
+  {
+    "chapterNumber": 1,
+    "title": "Chapter title",
+    "startPage": 5,
+    "endPage": 20
+  }
+]
+
+TOC Text:
+${tocText}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: "application/json" }
+    })
+  });
+
+  if (!response.ok) throw new Error("Gemini TOC extraction failed");
+
+  const resData = await response.json();
+  let rawText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
+  let cleaned = rawText.trim();
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
+  }
+  
+  const chapters = JSON.parse(cleaned);
+  return chapters.map((ch, idx) => ({
+    id: 'ch-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+    chapterNumber: ch.chapterNumber || (idx + 1),
+    title: ch.title,
+    startPage: parseInt(ch.startPage) || 1,
+    endPage: parseInt(ch.endPage) || totalPages
+  }));
+}
+
+// Regex chapter scanner fallback
+async function extractChaptersByRegex(pdf, statusCallback) {
+  const chapters = [];
+  const totalPages = pdf.numPages;
+  
+  for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+    if (pageNum % 10 === 0) {
+      if (statusCallback) statusCallback(`Scanning page ${pageNum}/${totalPages}...`);
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
+    
+    try {
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      const text = textContent.items.map(item => item.str).join(' ');
+      
+      const match = text.match(/(?:^|\n)\s*(?:CHAPTER|Chapter|Ch\.)\s+(\d+|[IVXLCDM]+)\b/i);
+      if (match) {
+        let title = `Chapter ${match[1]}`;
+        const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const chLineIdx = lines.findIndex(line => line.toLowerCase().includes('chapter') || line.toLowerCase().includes('ch.'));
+        if (chLineIdx !== -1) {
+          if (lines[chLineIdx + 1] && lines[chLineIdx + 1].length > 3 && lines[chLineIdx + 1].length < 100) {
+            title = `Chapter ${match[1]}: ${lines[chLineIdx + 1]}`;
+          } else {
+            title = lines[chLineIdx];
+          }
+        }
+        
+        chapters.push({
+          chapter: match[1],
+          title: title,
+          startPage: pageNum
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to read page " + pageNum, e);
+    }
+  }
+  
+  if (chapters.length === 0) return null;
+  
+  chapters.sort((a, b) => a.startPage - b.startPage);
+  
+  const uniqueChapters = [];
+  const seenChapters = new Set();
+  
+  chapters.forEach(ch => {
+    const key = String(ch.chapter).toLowerCase();
+    if (!seenChapters.has(key)) {
+      seenChapters.add(key);
+      uniqueChapters.push(ch);
+    }
+  });
+  
+  return uniqueChapters.map((ch, idx) => {
+    const next = uniqueChapters[idx + 1];
+    const endPage = next ? next.startPage - 1 : totalPages;
+    return {
+      id: 'ch-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+      chapterNumber: idx + 1,
+      title: ch.title,
+      startPage: ch.startPage,
+      endPage: Math.max(ch.startPage, endPage)
+    };
+  });
+}
+
+// Render Book Explorer UI
+function renderBookExplorer() {
+  const box = document.getElementById('book-explorer-box');
+  const titleEl = document.getElementById('book-title');
+  const pagesEl = document.getElementById('book-pages');
+  const listEl = document.getElementById('chapters-list');
+  
+  if (!state.uploadedBook) {
+    box.style.display = 'none';
+    return;
+  }
+  
+  box.style.display = 'block';
+  titleEl.textContent = state.uploadedBook.name;
+  
+  const isLinked = window.currentPdfDoc ? true : false;
+  if (isLinked) {
+    pagesEl.innerHTML = `${state.uploadedBook.totalPages} Pages <span class="badge badge-success" style="padding: 0.1rem 0.25rem; font-size: 0.6rem; margin-left: 0.25rem; background-color: var(--success); color: white;">Active</span>`;
+  } else {
+    pagesEl.innerHTML = `${state.uploadedBook.totalPages} Pages <span class="badge badge-warning" style="padding: 0.1rem 0.25rem; font-size: 0.6rem; margin-left: 0.25rem; cursor: pointer; background-color: var(--warning); color: white;" onclick="document.getElementById('file-input').click()">Re-link PDF</span>`;
+  }
+  
+  listEl.innerHTML = "";
+  
+  if (!state.chapters || state.chapters.length === 0) {
+    listEl.innerHTML = `<div style="text-align: center; font-size: 0.75rem; color: var(--text-muted); padding: 1rem;">No chapters defined. Click "Add Chapter" to create one.</div>`;
+    return;
+  }
+  
+  state.chapters.forEach(ch => {
+    const item = document.createElement('div');
+    item.className = 'chapter-item';
+    
+    item.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.25rem;">
+        <div style="font-weight: 500; font-size: 0.75rem; color: var(--text-main); word-break: break-word;">
+          ${ch.title}
+        </div>
+        <div style="display: flex; gap: 0.15rem; flex-shrink: 0;">
+          <button onclick="openChapterGenModal('${ch.id}')" title="Generate questions" class="btn-icon-link" style="color: var(--primary);">
+            <i data-lucide="sparkles" style="width: 12px; height: 12px;"></i>
+          </button>
+          <button onclick="openChapterEditModal('${ch.id}')" title="Edit chapter" class="btn-icon-link" style="color: var(--text-muted);">
+            <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
+          </button>
+          <button onclick="deleteChapter('${ch.id}')" title="Delete chapter" class="btn-icon-link" style="color: var(--danger);">
+            <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
+          </button>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.65rem; color: var(--text-muted); margin-top: 0.25rem;">
+        <span>Pages ${ch.startPage} - ${ch.endPage}</span>
+        <span style="font-style: italic;">Ch ${ch.chapterNumber}</span>
+      </div>
+    `;
+    listEl.appendChild(item);
+  });
+  
+  lucide.createIcons();
+}
+
+// Open Chapter Edit/Add Modal
+function openChapterEditModal(chId = null) {
+  const modalTitle = document.getElementById('chapter-edit-modal-title');
+  const idInput = document.getElementById('chapter-edit-id');
+  const titleInput = document.getElementById('chapter-modal-title');
+  const startInput = document.getElementById('chapter-modal-start');
+  const endInput = document.getElementById('chapter-modal-end');
+
+  // Reset inputs
+  idInput.value = "";
+  titleInput.value = "";
+  startInput.value = "";
+  endInput.value = "";
+
+  if (chId) {
+    modalTitle.textContent = "Edit Chapter";
+    const ch = state.chapters.find(c => c.id === chId);
+    if (ch) {
+      idInput.value = ch.id;
+      titleInput.value = ch.title;
+      startInput.value = ch.startPage;
+      endInput.value = ch.endPage;
+    }
+  } else {
+    modalTitle.textContent = "Add Chapter";
+    let nextNum = 1;
+    let nextStart = 1;
+    if (state.chapters && state.chapters.length > 0) {
+      const last = state.chapters[state.chapters.length - 1];
+      nextNum = last.chapterNumber + 1;
+      nextStart = last.endPage + 1;
+    }
+    titleInput.value = `Chapter ${nextNum}: `;
+    startInput.value = nextStart;
+    endInput.value = state.uploadedBook ? state.uploadedBook.totalPages : nextStart + 10;
+  }
+
+  openModal('chapter-edit-modal-overlay');
+}
+
+// Save Chapter (Add or Edit)
+function saveChapter() {
+  const id = document.getElementById('chapter-edit-id').value;
+  const title = document.getElementById('chapter-modal-title').value.trim();
+  const startPage = parseInt(document.getElementById('chapter-modal-start').value);
+  const endPage = parseInt(document.getElementById('chapter-modal-end').value);
+
+  if (!title) {
+    showToast("Please enter a chapter title.", "error");
+    return;
+  }
+  if (isNaN(startPage) || isNaN(endPage) || startPage < 1 || endPage < startPage) {
+    showToast("Please enter valid start and end page numbers.", "error");
+    return;
+  }
+  if (state.uploadedBook && (startPage > state.uploadedBook.totalPages || endPage > state.uploadedBook.totalPages)) {
+    showToast(`Page numbers cannot exceed total pages in the book (${state.uploadedBook.totalPages}).`, "error");
+    return;
+  }
+
+  if (id) {
+    // Edit existing
+    const idx = state.chapters.findIndex(c => c.id === id);
+    if (idx !== -1) {
+      state.chapters[idx] = { ...state.chapters[idx], title, startPage, endPage };
+      showToast("Chapter updated!", "success");
+    }
+  } else {
+    // Add new
+    const nextNum = state.chapters.length + 1;
+    const newCh = {
+      id: 'ch-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+      chapterNumber: nextNum,
+      title,
+      startPage,
+      endPage
+    };
+    state.chapters.push(newCh);
+    state.chapters.sort((a, b) => a.startPage - b.startPage);
+    state.chapters.forEach((c, index) => c.chapterNumber = index + 1);
+    showToast("Chapter added!", "success");
+  }
+
+  closeModal('chapter-edit-modal-overlay');
+  renderBookExplorer();
   saveState();
 }
 
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => {
-      const base64String = reader.result.split(',')[1];
-      resolve(base64String);
-    };
-    reader.onerror = error => reject(error);
-  });
+// Delete Chapter
+function deleteChapter(chId) {
+  if (confirm("Are you sure you want to delete this chapter?")) {
+    state.chapters = state.chapters.filter(c => c.id !== chId);
+    state.chapters.forEach((c, index) => c.chapterNumber = index + 1);
+    renderBookExplorer();
+    saveState();
+    showToast("Chapter deleted.", "warning");
+  }
 }
+
+// Open Chapter Generation Modal
+function openChapterGenModal(chId) {
+  const ch = state.chapters.find(c => c.id === chId);
+  if (!ch) return;
+
+  document.getElementById('gen-chapter-id').value = chId;
+  document.getElementById('chapter-gen-modal-title').textContent = `Generate Questions: ${ch.title}`;
+  
+  document.getElementById('chapter-gen-count').value = "5";
+  document.getElementById('chapter-gen-type').value = "mix";
+  document.getElementById('chapter-gen-difficulty').value = "mix";
+  document.getElementById('chapter-gen-marks').value = "";
+
+  if (!state.apiKey) {
+    showToast("Please configure your Gemini API Key in the sidebar first.", "warning");
+  }
+
+  openModal('chapter-gen-modal-overlay');
+}
+
+// Generate questions using Gemini API
+async function triggerChapterQuestionGeneration() {
+  const chId = document.getElementById('gen-chapter-id').value;
+  const count = parseInt(document.getElementById('chapter-gen-count').value) || 5;
+  const type = document.getElementById('chapter-gen-type').value;
+  const difficulty = document.getElementById('chapter-gen-difficulty').value;
+  const customMarks = document.getElementById('chapter-gen-marks').value;
+
+  const ch = state.chapters.find(c => c.id === chId);
+  if (!ch) {
+    showToast("Selected chapter not found.", "error");
+    return;
+  }
+
+  if (!state.apiKey) {
+    showToast("Gemini API Key is required to generate questions. Please set it in the sidebar.", "error");
+    closeModal('chapter-gen-modal-overlay');
+    openModal('api-modal-overlay');
+    return;
+  }
+
+  if (!window.currentPdfDoc) {
+    showToast("Book PDF is not linked. Please click 'Re-link PDF' and select the file.", "error");
+    closeModal('chapter-gen-modal-overlay');
+    document.getElementById('file-input').click();
+    return;
+  }
+
+  closeModal('chapter-gen-modal-overlay');
+  
+  const loading = document.getElementById('upload-loading');
+  const statusEl = document.getElementById('loading-text');
+  loading.classList.add('active');
+  statusEl.textContent = `Extracting text for ${ch.title} (Pages ${ch.startPage} - ${ch.endPage})...`;
+
+  try {
+    let chapterText = "";
+    for (let pageNum = ch.startPage; pageNum <= Math.min(ch.endPage, state.uploadedBook.totalPages); pageNum++) {
+      statusEl.textContent = `Extracting page ${pageNum}...`;
+      try {
+        const page = await window.currentPdfDoc.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(' ');
+        chapterText += `\n--- PAGE ${pageNum} ---\n` + pageText;
+      } catch (e) {
+        console.warn(`Failed to extract page ${pageNum}`, e);
+      }
+    }
+
+    if (chapterText.trim().length < 50) {
+      throw new Error("Extracted text is too short. The PDF pages might be scanned images. Scanned PDFs are not fully supported for direct text generation without OCR.");
+    }
+
+    statusEl.textContent = `AI generating ${count} questions...`;
+    
+    const parsedQuestions = await generateQuestionsWithAI(chapterText, ch.title, count, type, difficulty, customMarks);
+    
+    if (parsedQuestions && parsedQuestions.length > 0) {
+      appendQuestionsToBank(parsedQuestions);
+      populateFilters();
+      renderQuestionBank();
+      saveState();
+      showToast(`Successfully generated ${parsedQuestions.length} questions for ${ch.title}!`, "success");
+    } else {
+      showToast("No questions were generated.", "warning");
+    }
+
+  } catch (err) {
+    console.error(err);
+    showToast(`Failed to generate questions: ${err.message}`, "error");
+  } finally {
+    loading.classList.remove('active');
+  }
+}
+
+// Generate questions call to Gemini
+async function generateQuestionsWithAI(chapterText, chapterTitle, count, type, difficulty, customMarks) {
+  const apiKey = state.apiKey;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+  let typeInstruction = "";
+  if (type === "mcq") {
+    typeInstruction = "Generate only Multiple Choice Questions (MCQ). Each MCQ must have exactly 4 items in 'options' and the correct answer text in 'answer'. Do NOT include the A/B/C/D option prefixes in the question text or the options array.";
+  } else if (type === "short") {
+    typeInstruction = "Generate only Short Answer Questions (marks weight should be 2 or 3). 'options' should be null, and 'answer' should contain the expected short answer key/rubric.";
+  } else if (type === "long") {
+    typeInstruction = "Generate only Long/Detailed Answer Questions (marks weight should be 5). 'options' should be null, and 'answer' should contain details of the main points required for full marks.";
+  } else if (type === "fill") {
+    typeInstruction = "Generate only 'Fill in the blanks' questions. 'options' should be null, and 'answer' should contain the correct blank filler word.";
+  } else {
+    typeInstruction = "Generate a mix of MCQ, Short Answer, and Long Answer questions.";
+  }
+
+  let diffInstruction = "";
+  if (difficulty !== "mix") {
+    diffInstruction = `The difficulty level for all questions must be exactly '${difficulty}'.`;
+  } else {
+    diffInstruction = "Generate a balanced mix of easy, medium, and hard questions.";
+  }
+
+  let marksInstruction = "";
+  if (customMarks) {
+    marksInstruction = `Each question must have exactly ${customMarks} marks.`;
+  } else {
+    marksInstruction = "Default marks weight should be: MCQ = 1 mark, Fill in the blanks = 1 mark, Short Answer = 2 or 3 marks, Long Answer = 5 marks.";
+  }
+
+  const prompt = `You are an expert curriculum developer. Read the textbook content provided below and generate exactly ${count} exam-grade questions from it.
+The topic for these questions is "${chapterTitle}".
+
+--- TEXTBOOK SOURCE CONTENT ---
+${chapterText}
+-------------------------------
+
+Constraints for Generation:
+1. Questions must be derived ONLY from the facts, concepts, and formulas explicitly mentioned in the text.
+2. ${typeInstruction}
+3. ${diffInstruction}
+4. ${marksInstruction}
+
+Return the results strictly as a valid JSON array of question objects. Do not wrap it in markdown code fences or write any conversational introduction/outro.
+JSON Schema structure:
+[
+  {
+    "question": "The question prompt text",
+    "options": ["Option A", "Option B", "Option C", "Option D"] or null,
+    "answer": "Correct answer / rubric",
+    "subject": "${state.paperMeta.subject || "General"}",
+    "topic": "${chapterTitle}",
+    "difficulty": "easy", "medium", or "hard",
+    "type": "mcq", "short", "long", or "fill",
+    "marks": a number
+  }
+]`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: "application/json" }
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.error?.message || "Gemini API call failed");
+  }
+
+  const resData = await response.json();
+  let rawText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
+  let cleaned = rawText.trim();
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
+  }
+  
+  return JSON.parse(cleaned);
+}
+
+// Bind to window for global inline event accessibility
+window.openChapterGenModal = openChapterGenModal;
+window.openChapterEditModal = openChapterEditModal;
+window.deleteChapter = deleteChapter;
 
 // AI Question extraction via Gemini API
 async function extractQuestionsWithAI(content, isImage = false, mimeType = '') {
